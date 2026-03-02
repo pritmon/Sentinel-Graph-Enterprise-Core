@@ -1,6 +1,8 @@
 import streamlit as st
 import sys
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # Add the parent directory to the path so we can import our agents module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
