@@ -45,7 +45,7 @@ class ExtractedKnowledge(BaseModel):
 
 cartographer_agent = Agent(
     'google-gla:gemini-1.5-pro-latest', 
-    result_type=ExtractedKnowledge,
+    output_type=ExtractedKnowledge,
     system_prompt=(
         "You are Specialist A: The Cartographer. "
         "Your role is to analyze high-stakes enterprise audit documents and extract complex entities and their relationships. "
