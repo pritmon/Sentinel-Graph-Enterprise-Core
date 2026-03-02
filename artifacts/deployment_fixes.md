@@ -69,3 +69,8 @@ This document serves as a comprehensive history of the bugs, architectural hurdl
   - Remapped the application to use the extremely fast and large-quota `gemini-2.5-flash` model.
   - Implemented dynamic loading by replacing the hardcoded model strings in `cartographer.py`, `detective.py`, and `auditor.py` with `os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')`.
   - Added the missing `import os` header across all three agents to prevent `NameError` crashes on dashboard initialization.
+
+## 11. Pydantic-AI Output Retrieval Change (`.data` to `.output`)
+- **Issue**: The dashboard crashed when extracting the final payloads with an `AttributeError: 'AgentRunResult' object has no attribute 'data'`.
+- **Cause**: Upgrading to `pydantic-ai` v0.8.x fundamentally changed the structure of the LLM return object. The legacy `.data` attribute was entirely deprecated and replaced with `.output`.
+- **Resolution**: Ran a codebase-wide refactor in `cartographer.py`, `detective.py`, and `auditor.py` replacing all instances of `result.data` with `result.output` to extract the JSON safely.
