@@ -57,3 +57,15 @@ This document serves as a comprehensive history of the bugs, architectural hurdl
   - Configured a `.gitignore` to block `/venv`, `/__pycache__/`, and the `.env` credentials file to strictly protect data sovereignty.
   - Migrated `COMMANDS_USED.md` down into the `/artifacts` directory for a cleaner repository root.
   - Updated the `README.md` file tree schema map points to correctly render the new documentation layout.
+
+## 9. Google Gemini API 400 ERROR (Literal String Injection)
+- **Issue**: After updating to a live Google AI Studio API key, Pydantic-AI threw a `400 INVALID_ARGUMENT` error because the `.env` injection script accidentally wrapped the key in literal double quotes (`"AIzaSy..."`).
+- **Cause**: Python's `dotenv` library and `os.environ` fetch raw string literals. The quotes were passed straight to the Google server authentication header, which rejected the syntax.
+- **Resolution**: Ran a Python cleaner script to explicitly strip all `"` characters from `.env` and rebooted the Streamlit server.
+
+## 10. Free Tier Quota Exhaustion (429 RESOURCE_EXHAUSTED) & Dynamic Modeling
+- **Issue**: Even with a valid API key, the system threw a 429 quota error because the `gemini-3.1-pro` endpoints are heavily rate-limited for Free Tier users.
+- **Resolution**:
+  - Remapped the application to use the extremely fast and large-quota `gemini-2.5-flash` model.
+  - Implemented dynamic loading by replacing the hardcoded model strings in `cartographer.py`, `detective.py`, and `auditor.py` with `os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')`.
+  - Added the missing `import os` header across all three agents to prevent `NameError` crashes on dashboard initialization.
