@@ -33,13 +33,16 @@ This document serves as a comprehensive history of the bugs, architectural hurdl
   - Installed `langchain-community` directly into the active `venv`.
   - Added `langchain-community>=0.0.1` explicitly to `requirements.txt` to ensure any future developers cloning the repository install it automatically.
 
-## 6. Pydantic-AI Version Compatibility (`result_type` kwarg)
-- **Issue**: The application threw a terminal `pydantic_ai.exceptions.UserError: Unknown keyword arguments: 'result_type'` during Agent initialization, crashing the UI instantly.
-- **Cause**: The system downloaded `pydantic-ai` v0.8.1. This version introduced a breaking syntax change to the `Agent()` setup, deprecating older input formats where the model string was mapped to a `model=` keyword.
+## 6. Pydantic-AI Version Compatibility (`output_type` & Model String)
+- **Issue**: The application threw a terminal `pydantic_ai.exceptions.UserError: Unknown keyword arguments: 'result_type'` during Agent initialization, crashing the UI instantly. Furthermore, the `google-gla:gemini...` model string was rejected.
+- **Cause**: The system downloaded `pydantic-ai` v0.8.1. This version introduced two breaking syntax changes to the `Agent()` setup:
+  1. The `model=` keyword was deprecated in favor of a positional argument, and it now strictly expects `gemini-1.5-pro` rather than the `google-gla:` prefix.
+  2. The `result_type` parameter was completely renamed to `output_type`.
 - **Resolution**:
-  - Diagnosed the new constructor parameters using Python's `help()` REPL.
+  - Wrote a custom Python `test_pydantic_ai.py` script to simulate and diagnose the `Agent.__init__` signature using Python's `inspect` module.
   - Refactored `cartographer.py`, `detective.py`, and `auditor.py`.
-  - Shifted the Gemini LLM string to a strict *positional argument* (e.g., `Agent('google-gla:gemini-1.5-pro-latest')`) while mapping `result_type=...` as a keyword argument, satisfying the v0.8.1 engine.
+  - Shifted the Gemini LLM string to the officially supported positional string: `Agent('gemini-1.5-pro')`.
+  - Replaced the deprecated `result_type=` kwarg with the new `output_type=` kwarg, satisfying the v0.8.1 engine.
 
 ## 7. Git Large File Push Error (HTTP 400)
 - **Issue**: While attempting to push the `artifacts/` folder to GitHub, Git threw an `HTTP 400 curl 22 The requested URL returned error: 400` and disconnected the push pipeline.
