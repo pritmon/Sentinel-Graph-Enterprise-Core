@@ -41,10 +41,8 @@ class ExtractedKnowledge(BaseModel):
 # ==========================================
 # 2. INITIALIZE THE PYDANTIC-AI AGENT
 # ==========================================
-# We configure The Cartographer with its specialized system prompt and strictly bind its output to `ExtractedKnowledge`.
-
 cartographer_agent = Agent(
-    'gemini-3.1-pro-preview', 
+    os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash'), 
     output_type=ExtractedKnowledge,
     system_prompt=(
         "You are Specialist A: The Cartographer. "
