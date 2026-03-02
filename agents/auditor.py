@@ -27,7 +27,7 @@ class AuditEval(BaseModel):
 
 # The Auditor acts as the quality assurance layer before results are shown to the user.
 auditor_agent = Agent(
-    'google-gla:gemini-1.5-pro-latest',
+    'gemini-1.5-pro',
     output_type=AuditEval,
     system_prompt=(
         "You are Specialist C: The Auditor. "

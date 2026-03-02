@@ -44,7 +44,7 @@ class ExtractedKnowledge(BaseModel):
 # We configure The Cartographer with its specialized system prompt and strictly bind its output to `ExtractedKnowledge`.
 
 cartographer_agent = Agent(
-    'google-gla:gemini-1.5-pro-latest', 
+    'gemini-1.5-pro', 
     output_type=ExtractedKnowledge,
     system_prompt=(
         "You are Specialist A: The Cartographer. "
