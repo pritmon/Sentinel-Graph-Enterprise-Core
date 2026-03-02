@@ -1,5 +1,6 @@
 langgraph>=0.0.15
 langchain-neo4j>=0.1.0
+langchain-community>=0.0.1
 neo4j>=5.14.0
 pydantic-ai>=0.0.1
 streamlit>=1.31.0
