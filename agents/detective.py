@@ -103,4 +103,4 @@ def analyze_audit_question(question: str) -> QueryResult:
     
     # 3. Execute LLM synchronously
     result = detective_agent.run_sync(prompt)
-    return result.data
+    return result.output

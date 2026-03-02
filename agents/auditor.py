@@ -68,4 +68,4 @@ def evaluate_results(original_question: str, cypher_query: str, neo4j_results: s
     
     # Run the evaluation synchronously
     result = auditor_agent.run_sync(prompt)
-    return result.data
+    return result.output

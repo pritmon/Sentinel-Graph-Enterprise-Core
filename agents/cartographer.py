@@ -125,7 +125,7 @@ def process_document(document_text: str) -> ExtractedKnowledge:
     """
     # 1. Run the LLM extraction synchronously
     result = cartographer_agent.run_sync(document_text)
-    extracted = result.data
+    extracted = result.output
     
     # 2. Persist to Graph Database
     merge_knowledge_to_neo4j(None, extracted)
