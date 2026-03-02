@@ -57,7 +57,7 @@ class QueryResult(BaseModel):
 
 # The Detective aims to uncover hidden compliance issues or fraud by exploring relationships deeper than a simple text search.
 detective_agent = Agent(
-    'gemini-1.5-pro',
+    'gemini-3.1-pro',
     output_type=QueryResult,
     system_prompt=(
         "You are Specialist B: The Detective. "
