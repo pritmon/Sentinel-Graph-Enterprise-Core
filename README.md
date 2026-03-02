@@ -22,10 +22,10 @@ Sentinel-Graph-Enterprise-Core/
 │   └── mock_dashboard.py     # Demo Streamlit UI for CI/CD Browser Testing
 ├── knowledge_base/             # Directory for sample raw documents
 ├── artifacts/                  # System plan and walkthrough proof of verification
+│   └── COMMANDS_USED.md      # History of commands used to initialize project
 ├── .env.example                # Template for DB and API Key credentials
 ├── requirements.txt            # Python dependencies (LangGraph, Neo4j, etc.)
 ├── README.md                   # This document
-└── COMMANDS_USED.md            # History of commands used to initialize project
 ```
 
 ## Setup & Installation
