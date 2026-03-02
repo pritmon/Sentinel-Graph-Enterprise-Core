@@ -31,4 +31,4 @@ We dynamically mapped the LangGraph Orchestrator and all three Pydantic-AI Agent
 
 The system is now fully live and successfully audited the mock contract in milliseconds!
 
-![Live Sentinel-Graph Dashboard Execution](/Users/pritammondal/.gemini/antigravity/brain/c4954a22-6219-4562-85b1-35aa0d3408a8/media__1772477304096.png)
+![Live Sentinel-Graph Dashboard Execution](media__1772477304096.png)
