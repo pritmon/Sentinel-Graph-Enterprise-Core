@@ -57,7 +57,7 @@ class QueryResult(BaseModel):
 
 # The Detective aims to uncover hidden compliance issues or fraud by exploring relationships deeper than a simple text search.
 detective_agent = Agent(
-    model='google-gla:gemini-1.5-pro-latest',
+    'google-gla:gemini-1.5-pro-latest',
     result_type=QueryResult,
     system_prompt=(
         "You are Specialist B: The Detective. "
