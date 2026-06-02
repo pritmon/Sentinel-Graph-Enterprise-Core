@@ -29,7 +29,7 @@ The Sentinel-Graph Core is built on a modern, ultra-fast agentic framework:
 ---
 
 ## 🤖 The Multi-Agent Architecture
-The system consists of three distinct AI Specialists operating within a continuous LangGraph loop.
+The system consists of four distinct agentic components operating within a continuous LangGraph loop.
 
 ### 1. `Specialist A:` The Cartographer (`agents/cartographer.py`)
 - **Role**: Data Ingestion & Entity Mapping.
@@ -42,6 +42,10 @@ The system consists of three distinct AI Specialists operating within a continuo
 ### 3. `Specialist C:` The Auditor (`agents/auditor.py`)
 - **Role**: Self-RAG Quality Assurance layer.
 - **Function**: Evaluates the data retrieved by The Detective. It scores the relevance from `0.0` to `1.0`. If the score falls below `0.85%`, The Auditor dynamically rewrites the original question and forces the LangGraph state machine to loop back to The Detective for a retry.
+
+### 4. `The Manager:` The Orchestrator (`agents/orchestrator.py`)
+- **Role**: StateGraph Manager & Workflow Controller.
+- **Function**: The central "brain" of the system. It decides which agent speaks next, manages the state transitions between The Detective and The Auditor during the self-correction loops, and compiles the final Multi-Agent Reasoning Trace for the dashboard.
 
 ---
 
