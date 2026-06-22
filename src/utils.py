@@ -1,66 +1,66 @@
+"""
+Database Helpers
+================
+
+Small, shared tools for talking to the Neo4j graph database. Every specialist uses
+these two functions instead of opening their own connection, so the database details
+live in just one place.
+"""
+
 import os
+
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
 
-# Load environment variables (e.g., NEO4J_URI, GEMINI_API_KEY) from .env file
+# Pull the database login (and other secrets) out of the .env file.
 load_dotenv()
+
 
 def get_neo4j_driver():
     """
-    Initializes and returns a Neo4j driver connection.
-    
-    This function acts as the core database bridge for the Sentinel-Graph system.
-    It reads the connection credentials from the environment and establishes a 
-    persistent driver instance that can be used for querying the Enterprise Knowledge Graph.
-    
-    Returns:
-        neo4j.Driver: A connected Neo4j driver instance, or None if the connection fails.
+    Open a connection to the Neo4j database and hand it back.
+
+    Reads the address and login from the environment. If anything goes wrong (wrong
+    password, database is off, etc.) it prints the problem and returns None instead
+    of crashing, so callers can fail gracefully.
     """
-    uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    user = os.getenv("NEO4J_USERNAME", "neo4j")
+    uri      = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    user     = os.getenv("NEO4J_USERNAME", "neo4j")
     password = os.getenv("NEO4J_PASSWORD", "password")
-    
+
     try:
-        # Establish connection using the official Neo4j Python driver
+        # Build the connection...
         driver = GraphDatabase.driver(uri, auth=(user, password))
-        
-        # Verify the database is actually reachable before returning
+
+        # ...and make sure the database actually answers before we trust it.
         driver.verify_connectivity()
         return driver
     except Exception as e:
         print(f"[ERROR] Failed to connect to Neo4j Enterprise Graph: {e}")
         return None
 
+
 def execute_query(query: str, parameters: dict = None):
     """
-    Executes a raw Cypher query against the Neo4j database safely.
-    
-    This utility is used by The Detective (for dynamic graph traversal) and 
-    The Cartographer (for entity mapping) to interact with the database.
-    
-    Args:
-        query (str): The Cypher query string to execute.
-        parameters (dict, optional): Parameter dictionary to prevent Cypher injection risks.
-        
-    Returns:
-        list[dict]: A list of records returned by the query, structured as dictionaries.
+    Run one Cypher query and return its rows as a list of dictionaries.
+
+    `parameters` lets you pass values separately from the query text, which keeps
+    things safe from injection. Returns None if the connection or the query fails.
     """
-    # Obtain a fresh driver connection
+    # Get a fresh connection for this query.
     driver = get_neo4j_driver()
     if not driver:
         return None
-    
-    # Use a session context manager to ensure the connection is cleanly closed
+
+    # "with ... as session" guarantees the session is tidied up when we're done.
     with driver.session() as session:
         try:
-            # Execute the query with optional safe parameters
+            # Run the query and turn each returned row into a plain dictionary.
             result = session.run(query, parameters or {})
-            
-            # Extract and return the raw data mappings from the Neo4j records
             return [record.data() for record in result]
         except Exception as e:
             print(f"[ERROR] Cypher Execution Interrupted: {e}")
             return None
         finally:
-            # Always close the driver to prevent connection pooling leaks
+            # Always close the connection so we don't leak open handles.
             driver.close()

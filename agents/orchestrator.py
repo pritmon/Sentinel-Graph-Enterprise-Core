@@ -1,82 +1,88 @@
 """
-Agentic Workflow Orchestrator
--------------------------------
+The Orchestrator
+================
 
-This module defines the core LangGraph state machine that governs the Sentinel-Graph system.
-It ties together The Detective (Query Generation), the Database (Execution), and
-The Auditor (Self-RAG Evaluation) into a robust, autonomous retry loop.
+This is the conductor that makes the three specialists work together.
+
+It runs a simple, repeating loop:
+
+    Detective writes a query  ->  Database runs it  ->  Auditor grades the result
+
+If the Auditor is happy (or we've tried enough times), we stop and report the answer.
+If not, the Auditor's rewritten question is sent back to the Detective for another try.
+LangGraph handles the wiring of these steps and the loop-back.
 """
 
-import os
 from typing import TypedDict, List
+
 from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage, AIMessage
 
 from agents.detective import analyze_audit_question
 from agents.auditor import evaluate_results
 from src.utils import execute_query
 
-# ==========================================
-# 1. GRAPH STATE DEFINITION
-# ==========================================
+
+# =============================================================================
+# 1. THE SHARED NOTEPAD
+# =============================================================================
+# Every step reads from and writes to this single shared dictionary. It's the
+# "memory" that travels through the loop, carrying everything we've learned so far.
 
 class GraphState(TypedDict):
-    """
-    The shared memory structure passed between LangGraph nodes.
-    This holds the current context of the audit investigation.
-    """
-    question: str                  # The original user question
-    cypher_query: str              # The latest generated Cypher query
-    db_results: str                # The raw JSON results from Neo4j
-    relevance_score: float         # The grade assigned by The Auditor
-    rewritten_question: str        # The updated question if the previous attempt failed
-    retries: int                   # Attempt counter to prevent infinite loops
-    reasoning_trace: List[dict]    # The step-by-step audit log shown in the Dashboard
-    best_results: str              # Highest-scoring successful retrieval seen across attempts
-    best_score: float              # The relevance score of best_results
-    final_answer: str              # The synthesized final output
+    """The shared memory passed between every step of the workflow."""
 
-# ==========================================
-# 2. DEFINE GRAPH NODES (Workflow Steps)
-# ==========================================
+    question:        str         # The original user question
+    cypher_query:    str         # The latest query the Detective wrote
+    db_results:      str         # What the database returned for that query
+    relevance_score: float       # The Auditor's grade for the latest attempt
+    rewritten_question: str      # A clearer question to retry with, if needed
+    retries:         int         # How many attempts we've made (stops endless loops)
+    reasoning_trace: List[dict]  # A running log of every step, shown in the dashboard
+    best_results:    str         # The best good answer seen across all attempts
+    best_score:      float       # The grade that came with best_results
+    final_answer:    str         # The finished answer we hand back
+
+
+# =============================================================================
+# 2. THE STEPS OF THE LOOP
+# =============================================================================
 
 def generate_cypher(state: GraphState) -> GraphState:
-    """
-    Node: The Detective (Specialist B) designs the Cypher Query.
-    """
+    """Step 1 — The Detective writes a database query for the question."""
+    # Use the rewritten question if a previous round produced one, else the original.
     question = state.get("rewritten_question") or state["question"]
-    trace = state.get("reasoning_trace", [])
-    
+    trace    = state.get("reasoning_trace", [])
+
     print(f"--- DETECTIVE: Generating Cypher for: '{question}' ---")
-    
+
     result = analyze_audit_question(question)
-    
-    # Append the action to the audit trace for transparency
+
+    # Jot this step down in the log so the dashboard can show the full story.
     trace.append({
-        "agent": "Detective",
-        "action": "Generated Cypher",
-        "query": result.cypher_query,
-        "reasoning": result.reasoning
+        "agent":     "Detective",
+        "action":    "Generated Cypher",
+        "query":     result.cypher_query,
+        "reasoning": result.reasoning,
     })
-    
+
     return {
-        "cypher_query": result.cypher_query,
+        "cypher_query":    result.cypher_query,
         "reasoning_trace": trace,
-        "retries": state.get("retries", 0) + 1
+        "retries":         state.get("retries", 0) + 1,
     }
 
+
 def execute_cypher(state: GraphState) -> GraphState:
-    """
-    Node: System executes the generated query against the Neo4j Graph.
-    """
+    """Step 2 — Run the Detective's query against the Neo4j database."""
     query = state["cypher_query"]
     trace = state["reasoning_trace"]
-    
-    print(f"--- DATABASE: Executing Cypher ---")
-    
-    # Sanitize the LLM output in case it included markdown blocks (```cypher ... ```)
+
+    print("--- DATABASE: Executing Cypher ---")
+
+    # The AI sometimes wraps its query in ```cypher fences — strip those off.
     clean_query = query.replace("```cypher", "").replace("```", "").strip()
-    
+
+    # Run it, then describe the outcome in three clear cases: error, empty, or data.
     results = execute_query(clean_query)
     if results is None:
         str_results = f"CYPHER_ERROR: Query failed to execute. The query may have a syntax error or reference non-existent properties. Query was: {clean_query}"
@@ -84,133 +90,134 @@ def execute_cypher(state: GraphState) -> GraphState:
         str_results = "No results found."
     else:
         str_results = str(results)
-    
+
     trace.append({
-        "agent": "System",
-        "action": "Database Execution",
-        "results": str_results
+        "agent":   "System",
+        "action":  "Database Execution",
+        "results": str_results,
     })
-    
+
     return {"db_results": str_results, "reasoning_trace": trace}
 
+
 def audit_results(state: GraphState) -> GraphState:
-    """
-    Node: The Auditor (Specialist C) evaluates the retrieved graph data.
-    Implements the Self-RAG (Retrieval-Augmented Generation) feedback loop.
-    """
+    """Step 3 — The Auditor grades the result and decides if a retry is worth it."""
     question = state.get("rewritten_question") or state["question"]
-    query = state["cypher_query"]
-    results = state["db_results"]
-    trace = state["reasoning_trace"]
-    
-    print(f"--- AUDITOR: Evaluating Results against Original Question ---")
-    
+    query    = state["cypher_query"]
+    results  = state["db_results"]
+    trace    = state["reasoning_trace"]
+
+    print("--- AUDITOR: Evaluating Results against Original Question ---")
+
     eval_result = evaluate_results(question, query, results)
 
     trace.append({
-        "agent": "Auditor",
-        "action": "Evaluated Retrieval",
-        "score": eval_result.score,
-        "reasoning": eval_result.reasoning
+        "agent":     "Auditor",
+        "action":    "Evaluated Retrieval",
+        "score":     eval_result.score,
+        "reasoning": eval_result.reasoning,
     })
 
-    # Track the best *usable* retrieval so a later failed/empty retry can't clobber a good one.
-    # A retry that errors out or returns nothing must never overwrite a good earlier answer.
+    # Remember the best *usable* answer so far. A later attempt that errors out or comes
+    # back empty must never be allowed to overwrite a good answer we already found.
     best_results = state.get("best_results", "")
-    best_score = state.get("best_score", -1.0)
-    is_usable = bool(results) and not results.startswith("CYPHER_ERROR") and results != "No results found."
+    best_score   = state.get("best_score", -1.0)
+    is_usable    = bool(results) and not results.startswith("CYPHER_ERROR") and results != "No results found."
     if is_usable and eval_result.score > best_score:
         best_results = results
-        best_score = eval_result.score
+        best_score   = eval_result.score
 
     return {
         "relevance_score": eval_result.score,
-        # If score is failing (< 0.85), store the LLM's suggested rewrite for the next loop
+        # Keep the rewritten question only when the grade was too low (we'll retry with it).
         "rewritten_question": eval_result.rewritten_query if eval_result.score < 0.85 else "",
         "reasoning_trace": trace,
-        "best_results": best_results,
-        "best_score": best_score
+        "best_results":    best_results,
+        "best_score":      best_score,
     }
 
+
 def generate_final_answer(state: GraphState) -> GraphState:
-    """
-    Node: Synthesizes final answer for the user interface.
-    """
-    # Prefer the best successful retrieval gathered across all attempts; fall back to the
-    # latest raw result only if no attempt ever produced usable data.
+    """Step 4 — Wrap up: report the best answer we gathered along the way."""
+    # Prefer the best good answer from any attempt; only fall back to the latest raw
+    # result if no attempt ever produced something usable.
     results = state.get("best_results") or state["db_results"]
-    trace = state["reasoning_trace"]
+    trace   = state["reasoning_trace"]
 
-    print(f"--- SYSTEM: Generating Final Answer ---")
+    print("--- SYSTEM: Generating Final Answer ---")
 
-    # In a production system, another LLM call could be used to write a prose response.
-    # For this system, appending the structured results suffices.
+    # A fuller system might have an AI rewrite this into prose; here the data speaks.
     final_ans = f"Based on the audit traversal, the findings are: {results}"
-    
+
     trace.append({
-        "agent": "System",
+        "agent":  "System",
         "action": "Final Output Generation",
-        "answer": final_ans
+        "answer": final_ans,
     })
-    
+
     return {"final_answer": final_ans, "reasoning_trace": trace}
 
-# ==========================================
-# 3. DEFINE ROUTING LOGIC (Edges)
-# ==========================================
+
+# =============================================================================
+# 3. THE DECISION: STOP OR TRY AGAIN?
+# =============================================================================
 
 def should_retry(state: GraphState) -> str:
-    """
-    Conditional Edge Router: Decides whether to break the loop or retry.
-    """
-    score = state.get("relevance_score", 0.0)
+    """After grading, pick the next step: finish up, or loop back to the Detective."""
+    score   = state.get("relevance_score", 0.0)
     retries = state.get("retries", 0)
-    
+
+    # Good enough (0.85+) OR we've already tried 3 times → stop and report.
     if score >= 0.85 or retries >= 3:
         print(f"--- ROUTER: Score {score} passes threshold (or max retries reached). Moving to Final Answer. ---")
         return "generate_final_answer"
-    else:
-        print(f"--- ROUTER: Score {score} is too low. Sending back to The Detective with rewritten query. ---")
-        return "generate_cypher"
 
-# ==========================================
-# 4. BUILD AND COMPILE THE GRAPH
-# ==========================================
+    # Otherwise, go around again with the Auditor's clearer question.
+    print(f"--- ROUTER: Score {score} is too low. Sending back to The Detective with rewritten query. ---")
+    return "generate_cypher"
+
+
+# =============================================================================
+# 4. WIRING THE STEPS TOGETHER
+# =============================================================================
 
 def build_workflow():
-    """Compiles the LangGraph state machine workflow."""
+    """Connect the four steps into a loop and hand back the ready-to-run workflow."""
     workflow = StateGraph(GraphState)
-    
-    # Register all functional nodes
-    workflow.add_node("generate_cypher", generate_cypher)
-    workflow.add_node("execute_cypher", execute_cypher)
-    workflow.add_node("audit_results", audit_results)
+
+    # Register each step as a node in the graph.
+    workflow.add_node("generate_cypher",       generate_cypher)
+    workflow.add_node("execute_cypher",        execute_cypher)
+    workflow.add_node("audit_results",         audit_results)
     workflow.add_node("generate_final_answer", generate_final_answer)
-    
-    # Define the strict linear sequence of the pipeline
+
+    # The straight-line part: write -> run -> grade.
     workflow.set_entry_point("generate_cypher")
     workflow.add_edge("generate_cypher", "execute_cypher")
-    workflow.add_edge("execute_cypher", "audit_results")
-    
-    # Define the conditional loop back mechanism (Self-RAG)
+    workflow.add_edge("execute_cypher",  "audit_results")
+
+    # The loop-back part: after grading, should_retry() picks where to go next.
     workflow.add_conditional_edges(
         "audit_results",
         should_retry,
         {
-            "generate_cypher": "generate_cypher",
-            "generate_final_answer": "generate_final_answer"
-        }
+            "generate_cypher":       "generate_cypher",
+            "generate_final_answer": "generate_final_answer",
+        },
     )
-    
+
+    # Finishing the answer ends the run.
     workflow.add_edge("generate_final_answer", END)
-    
+
     return workflow.compile()
 
-# Export the compiled graph instance for the Dashboard to use
+
+# The ready-to-use workflow the dashboard imports and runs.
 audit_graph = build_workflow()
 
+
 if __name__ == "__main__":
-    # Internal Unit Test
+    # A tiny manual check you can run with `python agents/orchestrator.py`.
     test_state = {"question": "Who signed Project X?", "retries": 0, "reasoning_trace": []}
     res = audit_graph.invoke(test_state)
     print("Final State:", res)

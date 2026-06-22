@@ -1,10 +1,16 @@
 """
-Sentinel-Graph Enterprise Auditor — Streamlit dashboard.
+The Dashboard
+=============
 
-Cloud-ready: on Streamlit Community Cloud the connection settings and API keys come
-from st.secrets; locally they come from .env. The secrets→env bridge below MUST run
-before the agents are imported, because each Pydantic-AI Agent reads GEMINI_MODEL /
-ANTHROPIC_API_KEY from the environment at construction time.
+This is the web page people actually see and click on (built with Streamlit).
+
+From here you can load a document into the graph and ask audit questions. Behind
+the buttons, it calls the three specialists and shows their step-by-step thinking.
+
+Cloud note: when running on Streamlit Community Cloud the database login and API key
+come from "secrets"; when running on your own machine they come from a .env file.
+The little secrets→environment bridge below MUST run BEFORE the agents are imported,
+because each agent reads those settings the moment it is created.
 """
 
 import os
@@ -13,27 +19,38 @@ import ast
 
 import streamlit as st
 
+# Set up the browser tab (title, icon, wide layout) before anything is drawn.
 st.set_page_config(
     page_title="Sentinel-Graph Enterprise Auditor",
     page_icon="🛡️",
     layout="wide",
 )
 
-# ── secrets → environment (must precede agent imports) ────────────────────────
+
+# =============================================================================
+# 1. SETTINGS: COPY CLOUD "SECRETS" INTO THE ENVIRONMENT
+# =============================================================================
+# On the cloud, settings live in st.secrets. The agents expect them as environment
+# variables, so we copy them across here — and this has to happen before we import
+# the agents further down.
 try:
     for _k, _v in st.secrets.items():
         if isinstance(_v, (str, int, float, bool)):
             os.environ[str(_k)] = str(_v)
 except Exception:
-    # No secrets.toml (typical when running locally) — fall back to .env below.
+    # No secrets file (the normal case when running locally) — we'll use .env instead.
     pass
 
 from dotenv import load_dotenv
-load_dotenv()  # does not override values already set from st.secrets
+load_dotenv()  # fills in anything not already set from st.secrets
 
+# Let Python find the project's modules (agents/, src/) no matter where we're launched.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── styling ───────────────────────────────────────────────────────────────────
+
+# =============================================================================
+# 2. LOOK AND FEEL (the page's colors and styling)
+# =============================================================================
 st.markdown(
     """
     <style>
@@ -65,6 +82,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# The big banner at the top of the page.
 st.markdown(
     """
     <div class="sg-hero">
@@ -76,13 +94,22 @@ st.markdown(
 )
 
 
-# ── DB helpers (degrade gracefully if Neo4j unreachable) ──────────────────────
+# =============================================================================
+# 3. SMALL HELPERS AND SAMPLE CONTENT
+# =============================================================================
+
 def graph_stats():
-    """Return (nodes, relationships, label_counts) or None if the DB is unreachable."""
+    """
+    Peek at the database and count what's inside.
+
+    Returns (number of nodes, number of links, per-label counts), or None if the
+    database can't be reached — which lets the page show a friendly status instead
+    of an error.
+    """
     try:
         from src.utils import execute_query
-        nodes = execute_query("MATCH (n) RETURN count(n) AS c")
-        rels = execute_query("MATCH ()-[r]->() RETURN count(r) AS c")
+        nodes  = execute_query("MATCH (n) RETURN count(n) AS c")
+        rels   = execute_query("MATCH ()-[r]->() RETURN count(r) AS c")
         labels = execute_query(
             "MATCH (n) UNWIND labels(n) AS l RETURN l AS label, count(*) AS c ORDER BY c DESC"
         )
@@ -93,6 +120,8 @@ def graph_stats():
         return None
 
 
+# A ready-made fraud report used by the "Seed sample" button so a fresh, empty
+# database has something interesting to explore right away.
 SAMPLE_DOC = """
 CLASSIFIED AUDIT REPORT — FRAUD INVESTIGATION FILE #2024-FIN-009
 
@@ -114,6 +143,7 @@ incorporated 2020. Project X is suspected to siphon $5,000,000 from Alpha Corp t
 entities controlled by John Doe.
 """.strip()
 
+# One-click example questions shown as buttons.
 SAMPLE_QUESTIONS = [
     "Which shell companies is John Doe connected to through contracts, and what are their risk scores?",
     "List every company ranked by risk_score, with its jurisdiction.",
@@ -121,15 +151,18 @@ SAMPLE_QUESTIONS = [
     "What is the value and signing date of Project X, and which companies does it involve?",
 ]
 
-# ── sidebar: status + ingestion ───────────────────────────────────────────────
+
+# =============================================================================
+# 4. THE SIDEBAR: STATUS + LOADING DOCUMENTS
+# =============================================================================
 with st.sidebar:
     st.subheader("⚙️ System Status")
+
+    # Show whether the database is reachable, plus a quick count of what's inside.
     model = os.getenv("GEMINI_MODEL", "(unset)")
     stats = graph_stats()
     if stats is not None:
-        st.markdown(
-            f'<span class="sg-badge sg-ok">● NEO4J CONNECTED</span>', unsafe_allow_html=True
-        )
+        st.markdown('<span class="sg-badge sg-ok">● NEO4J CONNECTED</span>', unsafe_allow_html=True)
         n, r, labels = stats
         c1, c2 = st.columns(2)
         c1.metric("Nodes", n)
@@ -137,9 +170,7 @@ with st.sidebar:
         if labels:
             st.caption(" · ".join(f"{x['label']} ({x['c']})" for x in labels))
     else:
-        st.markdown(
-            f'<span class="sg-badge sg-bad">● NEO4J UNREACHABLE</span>', unsafe_allow_html=True
-        )
+        st.markdown('<span class="sg-badge sg-bad">● NEO4J UNREACHABLE</span>', unsafe_allow_html=True)
         st.caption("Set NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD in secrets.")
     st.caption(f"🧠 Reasoning model: `{model}`")
 
@@ -147,16 +178,18 @@ with st.sidebar:
     st.subheader("🗺️ The Cartographer")
     st.caption("Specialist A — extract entities + properties into Neo4j.")
 
+    # Button 1: load the built-in sample report.
     if st.button("⚡ Seed sample fraud dataset", use_container_width=True):
         with st.spinner("Ingesting sample document…"):
             try:
                 from agents.cartographer import process_document
                 res = process_document(SAMPLE_DOC)
                 st.success(f"Seeded {len(res.entities)} entities, {len(res.relationships)} relationships.")
-                st.rerun()
+                st.rerun()  # refresh so the new counts show up
             except Exception as e:
                 st.error(f"Seed failed: {e}")
 
+    # Button 2: load whatever document the user pastes in.
     new_doc = st.text_area("Or paste your own audit document:", height=140)
     if st.button("Process & Map Entities", use_container_width=True):
         if not new_doc.strip():
@@ -173,19 +206,25 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Failed: {e}")
 
-# ── main: the audit ───────────────────────────────────────────────────────────
+
+# =============================================================================
+# 5. THE MAIN AREA: ASK A QUESTION
+# =============================================================================
 st.subheader("🔍 Run an Audit")
 st.caption("Specialist B (Detective) writes Cypher → DB executes → Specialist C (Auditor) grades and may loop.")
 
+# Remember the chosen question between clicks.
 if "sg_query" not in st.session_state:
     st.session_state.sg_query = ""
 
+# Show the example questions as a two-column grid of buttons.
 st.write("**Try a sample question:**")
 cols = st.columns(2)
 for i, q in enumerate(SAMPLE_QUESTIONS):
     if cols[i % 2].button(q, key=f"sample_{i}", use_container_width=True):
         st.session_state.sg_query = q
 
+# The free-text box (pre-filled if a sample button was clicked) and the run button.
 query = st.text_input(
     "Audit question",
     value=st.session_state.sg_query,
@@ -196,21 +235,32 @@ run = st.button("▶ Run Audit Trace", type="primary", use_container_width=True)
 
 
 def render_trace(trace):
-    """Render the multi-agent reasoning trace with agent-coloured steps and score bars."""
+    """
+    Draw the step-by-step story of what the agents did.
+
+    Each step gets a colored tag for which specialist acted, and for the Auditor's
+    grade we draw a little bar (green = good, yellow = so-so, red = poor).
+    """
     for i, step in enumerate(trace, 1):
-        agent = step.get("agent", "System")
+        agent  = step.get("agent", "System")
         action = step.get("action", "")
         st.markdown(
             f'<span class="agent-chip a-{agent}">{agent}</span> '
             f'<b>Step {i} — {action}</b>',
             unsafe_allow_html=True,
         )
+
+        # The Detective's query, shown as code.
         if step.get("query"):
             st.code(step["query"], language="cypher")
+
+        # Any agent's short explanation.
         if step.get("reasoning"):
             st.caption(step["reasoning"])
+
+        # The Auditor's grade, drawn as a colored progress bar.
         if "score" in step and isinstance(step.get("score"), (int, float)):
-            sc = float(step["score"])
+            sc    = float(step["score"])
             color = "#4ade80" if sc >= 0.85 else ("#facc15" if sc >= 0.5 else "#f87171")
             st.markdown(
                 f'<div class="score-wrap"><div class="score-fill" '
@@ -219,12 +269,15 @@ def render_trace(trace):
                 f'(loop-back threshold 0.85)</small>',
                 unsafe_allow_html=True,
             )
+
+        # The raw rows the database returned, tucked into a collapsible box.
         if step.get("results"):
             with st.expander("DB results"):
                 st.code(step["results"])
         st.divider()
 
 
+# When the run button is pressed, do the checks, then run the full workflow.
 if run:
     if not query.strip():
         st.warning("Enter an audit question.")
@@ -238,19 +291,22 @@ if run:
                     {"question": query, "retries": 0, "reasoning_trace": []}
                 )
 
+                # The headline answer. It arrives as text holding a list of rows, so we
+                # try to show it as a neat table and fall back to plain text if needed.
                 st.markdown("### ✅ Final Audit Answer")
-                answer = final.get("final_answer", "No answer generated.")
-                # The answer carries a stringified list of result rows; pretty-print if possible.
+                answer  = final.get("final_answer", "No answer generated.")
                 payload = answer.split("findings are:", 1)[-1].strip()
                 try:
                     st.dataframe(ast.literal_eval(payload), use_container_width=True)
                 except Exception:
                     st.info(answer)
 
+                # Two quick stats: how many tries it took, and the best grade reached.
                 m1, m2 = st.columns(2)
                 m1.metric("Detective ↔ Auditor passes", final.get("retries", 0))
                 m2.metric("Best relevance", f"{final.get('best_score', 0.0):.2f}")
 
+                # The full behind-the-scenes trace.
                 st.markdown("### 🧠 Multi-Agent Reasoning Trace")
                 render_trace(final.get("reasoning_trace", []))
             except Exception as e:
