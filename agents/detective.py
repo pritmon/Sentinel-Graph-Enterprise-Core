@@ -37,6 +37,15 @@ def get_graph_schema() -> str:
             LIMIT 40
         """)
 
+        # Sample one real node per label so the LLM sees which properties actually exist
+        # (e.g. that a Company carries a numeric risk_score) and queries them instead of guessing.
+        prop_samples = execute_query("""
+            MATCH (n)
+            WITH labels(n)[0] AS label, properties(n) AS props
+            WITH label, collect(props)[0] AS example
+            RETURN label, example
+        """)
+
         labels = node_labels[0]["labels"] if node_labels else []
         types  = rel_types[0]["types"]    if rel_types   else []
         keys   = prop_keys[0]["keys"]     if prop_keys   else []
@@ -44,11 +53,16 @@ def get_graph_schema() -> str:
             f"  (:{s['from_label']})-[:{s['rel_type']}]->(:{s['to_label']})"
             for s in (samples or [])
         )
+        prop_lines = "\n".join(
+            f"  (:{p['label']}) properties → {p['example']}"
+            for p in (prop_samples or [])
+        )
 
         return (
             f"Node Labels : {labels}\n"
             f"Relationship Types: {types}\n"
             f"Property Keys: {keys}\n"
+            f"Example node properties per label (use these real property names directly):\n{prop_lines}\n"
             f"Existing relationship patterns in database:\n{sample_lines}"
         )
     except Exception as e:
@@ -89,7 +103,14 @@ detective_agent = Agent(
         "   Never use COLLECT inside a WITH that feeds another COLLECT. "
         "   Prefer multiple simple MATCH patterns over one giant query.\n"
         "6. Never use list comprehensions ([x IN list WHERE ...]) inside a RETURN that also has aggregations.\n"
-        "7. When results are empty, broaden the MATCH pattern — do not add more OPTIONAL MATCH clauses."
+        "7. When results are empty, broaden the MATCH pattern — do not add more OPTIONAL MATCH clauses.\n"
+        "8. Do NOT use UNION. Express the whole answer as one MATCH plus OPTIONAL MATCH clauses with a "
+        "single RETURN. UNION branches with mismatched return columns are a common runtime error here.\n"
+        "9. GROUND ALL FACTS IN STORED PROPERTIES. Risk is stored as a numeric `risk_score` property "
+        "(0.0–1.0, higher = riskier) on Company nodes. To assess or rank risk, RETURN the actual "
+        "`risk_score` property — and likewise read jurisdiction, value_usd, employee_count, etc. from "
+        "their real properties. NEVER fabricate a risk verdict (e.g. a 'risk_level' of HIGH/LOW) via a "
+        "CASE expression or heuristic over ownership depth or counts; that invents facts not in the data."
     )
 )
 

@@ -32,6 +32,8 @@ class GraphState(TypedDict):
     rewritten_question: str        # The updated question if the previous attempt failed
     retries: int                   # Attempt counter to prevent infinite loops
     reasoning_trace: List[dict]    # The step-by-step audit log shown in the Dashboard
+    best_results: str              # Highest-scoring successful retrieval seen across attempts
+    best_score: float              # The relevance score of best_results
     final_answer: str              # The synthesized final output
 
 # ==========================================
@@ -104,30 +106,43 @@ def audit_results(state: GraphState) -> GraphState:
     print(f"--- AUDITOR: Evaluating Results against Original Question ---")
     
     eval_result = evaluate_results(question, query, results)
-    
+
     trace.append({
         "agent": "Auditor",
         "action": "Evaluated Retrieval",
         "score": eval_result.score,
         "reasoning": eval_result.reasoning
     })
-    
+
+    # Track the best *usable* retrieval so a later failed/empty retry can't clobber a good one.
+    # A retry that errors out or returns nothing must never overwrite a good earlier answer.
+    best_results = state.get("best_results", "")
+    best_score = state.get("best_score", -1.0)
+    is_usable = bool(results) and not results.startswith("CYPHER_ERROR") and results != "No results found."
+    if is_usable and eval_result.score > best_score:
+        best_results = results
+        best_score = eval_result.score
+
     return {
         "relevance_score": eval_result.score,
         # If score is failing (< 0.85), store the LLM's suggested rewrite for the next loop
         "rewritten_question": eval_result.rewritten_query if eval_result.score < 0.85 else "",
-        "reasoning_trace": trace
+        "reasoning_trace": trace,
+        "best_results": best_results,
+        "best_score": best_score
     }
 
 def generate_final_answer(state: GraphState) -> GraphState:
     """
     Node: Synthesizes final answer for the user interface.
     """
-    results = state["db_results"]
+    # Prefer the best successful retrieval gathered across all attempts; fall back to the
+    # latest raw result only if no attempt ever produced usable data.
+    results = state.get("best_results") or state["db_results"]
     trace = state["reasoning_trace"]
-    
+
     print(f"--- SYSTEM: Generating Final Answer ---")
-    
+
     # In a production system, another LLM call could be used to write a prose response.
     # For this system, appending the structured results suffices.
     final_ans = f"Based on the audit traversal, the findings are: {results}"

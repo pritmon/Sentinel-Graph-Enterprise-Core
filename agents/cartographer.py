@@ -8,7 +8,7 @@ and mapping them directly into the Neo4j Enterprise Graph Database.
 """
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from dotenv import load_dotenv
@@ -25,7 +25,18 @@ load_dotenv()
 class Entity(BaseModel):
     """Represents a discrete node in the knowledge graph."""
     name: str = Field(description="The normalized name of the entity, e.g., 'Acme Corp', 'John Doe'")
-    type: str = Field(description="The category of the entity. Must be one of: 'Company', 'Person', 'Contract', 'Date', 'Amount'")
+    type: str = Field(description="The category of the entity. Must be one of: 'Company', 'Person', 'Contract'")
+    properties: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Flat key/value attributes of the entity, stored directly on the graph node. "
+            "Values must be primitives (string, number, or boolean) — never nested objects or lists. "
+            "Capture every quantitative or categorical fact the document states about the entity, e.g. for a Company: "
+            "{'risk_score': 0.95, 'jurisdiction': 'British Virgin Islands', 'incorporation_date': '2019-03-03', "
+            "'employee_count': 0, 'is_shell': true, 'business_activity': 'none'}; "
+            "for a Contract: {'value_usd': 5000000, 'signed_date': '2024-01-15'}."
+        ),
+    )
     
 class Relationship(BaseModel):
     """Represents a directed edge connecting two entities in the knowledge graph."""
@@ -47,12 +58,19 @@ cartographer_agent = Agent(
     system_prompt=(
         "You are Specialist A: The Cartographer. "
         "Your role is to analyze high-stakes enterprise audit documents and extract complex entities and their relationships. "
-        "Focus meticulously on extracting:\n"
-        "1. Stakeholders (Persons, Companies, Departments)\n"
-        "2. Financials (USD Amounts, Currencies)\n"
-        "3. Legal (Contracts, Agreements, Clauses)\n"
-        "4. Temporal (Dates, Timestamps)\n"
-        "You must structure the output exactly as requested, identifying the entities and mapping logical relationships between them."
+        "Create a node ONLY for first-class actors and objects, using exactly these types:\n"
+        "  - 'Person'   (e.g. John Doe)\n"
+        "  - 'Company'  (e.g. Alpha Corp, Beta Ltd)\n"
+        "  - 'Contract' (e.g. Project X)\n"
+        "CRITICAL — attributes are node PROPERTIES, never their own nodes:\n"
+        "  - A risk score, jurisdiction/country, incorporation date, employee count, business activity, "
+        "or shell-company flag describes a Company → put it in that Company's `properties`, "
+        "e.g. risk_score, jurisdiction, incorporation_date, employee_count, is_shell, business_activity.\n"
+        "  - A monetary amount or signing date describes a Contract → put it in that Contract's `properties` "
+        "(value_usd, signed_date). Do NOT create separate 'Amount', 'Date', or jurisdiction nodes.\n"
+        "Always capture numeric risk scores exactly as stated (e.g. 0.95, 0.12) under the `risk_score` property. "
+        "Then map the logical relationships (OWNS, SIGNED, BENEFICIAL_OWNER_OF, INVOLVES) between the nodes. "
+        "Structure the output exactly as requested."
     ),
 )
 
@@ -85,9 +103,11 @@ def merge_knowledge_to_neo4j(ctx: RunContext[None], extracted_data: ExtractedKno
         # Phase 1: Create or Match Nodes (Entities)
         # We process nodes first to ensure relationships have valid anchoring points.
         for ent in extracted_data.entities:
-            # We use parameterized queries ($name) to prevent Cypher injection vulnerabilities.
-            q = f"MERGE (n:`{ent.type}` {{name: $name}})"
-            session.run(q, name=ent.name)
+            # We use parameterized queries ($name/$props) to prevent Cypher injection vulnerabilities.
+            # MERGE anchors on name; SET n += $props writes the extracted attributes (risk_score,
+            # jurisdiction, value_usd, ...) directly onto the node so The Detective can query them.
+            q = f"MERGE (n:`{ent.type}` {{name: $name}}) SET n += $props"
+            session.run(q, name=ent.name, props=ent.properties or {})
             created_entities += 1
             
         # Phase 2: Create or Match Edges (Relationships)
