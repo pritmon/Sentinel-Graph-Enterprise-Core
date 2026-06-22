@@ -151,7 +151,7 @@ def should_retry(state: GraphState) -> str:
     score = state.get("relevance_score", 0.0)
     retries = state.get("retries", 0)
     
-    if score >= 0.5 or retries >= 2:
+    if score >= 0.85 or retries >= 3:
         print(f"--- ROUTER: Score {score} passes threshold (or max retries reached). Moving to Final Answer. ---")
         return "generate_final_answer"
     else:
