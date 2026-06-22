@@ -1,9 +1,12 @@
-# Pinned to the known-good set verified locally (select Python 3.11 on Streamlit Cloud).
-# Only the packages the app actually imports — keeps the cloud build fast and reproducible.
+# Pinned to a clean-room verified set (select Python 3.11 on Streamlit Cloud).
+# NOTE: pydantic-ai-slim 0.8.1 is INCOMPATIBLE with current anthropic SDKs — its
+# Anthropic provider imports a `UserLocation` symbol the SDK renamed, which fails on
+# any fresh install (it only "worked" locally via a hand-patched venv). Pinned here
+# to the modern compatible pair, verified together in a clean venv.
 streamlit==1.50.0
-pydantic==2.12.5
-pydantic-ai==0.8.1
-anthropic==0.105.2
+pydantic==2.13.4
+pydantic-ai-slim[anthropic]==1.107.0
+anthropic==0.111.0
 langgraph==0.6.11
 langchain-core==0.3.83
 neo4j==5.28.3
