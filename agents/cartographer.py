@@ -99,6 +99,20 @@ cartographer_agent = Agent(
 # 3. SAVING THE MAP INTO NEO4J
 # =============================================================================
 
+# The AI sometimes labels the same idea two different ways (e.g. a company being part of a
+# contract). This map folds those synonyms into one consistent name so the graph stays tidy
+# and the Detective doesn't have to guess between equivalent relationship types.
+RELATION_SYNONYMS = {
+    "PARTY_TO":    "INVOLVES",
+    "INVOLVED_IN": "INVOLVES",
+    "PARTY_OF":    "INVOLVES",
+    "SIGNATORY":   "SIGNED",
+    "SIGNED_BY":   "SIGNED",
+    "OWNED_BY":    "OWNS",
+    "BENEFICIAL_OWNER": "BENEFICIAL_OWNER_OF",
+}
+
+
 @cartographer_agent.tool
 def merge_knowledge_to_neo4j(ctx: RunContext[None], extracted_data: ExtractedKnowledge) -> str:
     """
@@ -131,8 +145,10 @@ def merge_knowledge_to_neo4j(ctx: RunContext[None], extracted_data: ExtractedKno
 
         # Step 2: add the "links" (edges) between the things we just created.
         for rel in extracted_data.relationships:
-            # Tidy the label into Neo4j's expected style, e.g. "owned by" -> "OWNED_BY".
+            # Tidy the label into Neo4j's expected style, e.g. "owned by" -> "OWNED_BY",
+            # then fold any synonym into the one canonical name (e.g. PARTY_TO -> INVOLVES).
             safe_rel_type = rel.relation_type.replace(' ', '_').upper()
+            safe_rel_type = RELATION_SYNONYMS.get(safe_rel_type, safe_rel_type)
 
             # Find both ends by name, then MERGE the link so it's added only once.
             query = f"""

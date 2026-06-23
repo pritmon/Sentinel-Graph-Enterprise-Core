@@ -211,7 +211,14 @@ with st.sidebar:
 # 5. THE MAIN AREA: ASK A QUESTION
 # =============================================================================
 st.subheader("🔍 Run an Audit")
-st.caption("Specialist B (Detective) writes Cypher → DB executes → Specialist C (Auditor) grades and may loop.")
+with st.expander("ℹ️ How this works (3 AI specialists)"):
+    st.markdown(
+        "1. **🕵️ The Detective** turns your question into a database query.\n"
+        "2. **💾 The Database** runs that query and returns matching records.\n"
+        "3. **⚖️ The Auditor** checks the answer. If it's good (score ≥ 0.85) you get the result; "
+        "if not, it sends the Detective back to try again (up to 3 times).\n\n"
+        "The steps below show exactly what each specialist did."
+    )
 
 # Remember the chosen question between clicks.
 if "sg_query" not in st.session_state:
@@ -234,46 +241,82 @@ query = st.text_input(
 run = st.button("▶ Run Audit Trace", type="primary", use_container_width=True)
 
 
+def _row_count(results_text):
+    """Best-effort count of how many records the database returned, from its text form."""
+    if not results_text or results_text == "No results found.":
+        return 0
+    if results_text.startswith("CYPHER_ERROR"):
+        return None  # signals an error, not a count
+    try:
+        data = ast.literal_eval(results_text)
+        return len(data) if isinstance(data, list) else 1
+    except Exception:
+        return None
+
+
 def render_trace(trace):
     """
-    Draw the step-by-step story of what the agents did.
+    Tell the step-by-step story in plain language.
 
-    Each step gets a colored tag for which specialist acted, and for the Auditor's
-    grade we draw a little bar (green = good, yellow = so-so, red = poor).
+    Each specialist gets a colored tag and a one-line summary of what it did, so the
+    reader can follow the flow without reading raw query output.
     """
-    for i, step in enumerate(trace, 1):
+    for step in trace:
         agent  = step.get("agent", "System")
         action = step.get("action", "")
-        st.markdown(
-            f'<span class="agent-chip a-{agent}">{agent}</span> '
-            f'<b>Step {i} — {action}</b>',
-            unsafe_allow_html=True,
-        )
 
-        # The Detective's query, shown as code.
-        if step.get("query"):
-            st.code(step["query"], language="cypher")
+        # ── The Detective wrote a query ──────────────────────────────────────
+        if action == "Generated Cypher":
+            st.markdown(
+                '<span class="agent-chip a-Detective">Detective</span> '
+                '<b>wrote a database query</b>', unsafe_allow_html=True)
+            st.code(step.get("query", ""), language="cypher")
+            if step.get("reasoning"):
+                with st.expander("Why it wrote this query"):
+                    st.write(step["reasoning"])
 
-        # Any agent's short explanation.
-        if step.get("reasoning"):
-            st.caption(step["reasoning"])
+        # ── The database ran it ──────────────────────────────────────────────
+        elif action == "Database Execution":
+            results = step.get("results", "")
+            count   = _row_count(results)
+            if count is None:
+                st.markdown(
+                    '<span class="agent-chip a-System">Database</span> '
+                    '<b>⚠️ the query had an error</b>', unsafe_allow_html=True)
+            elif count == 0:
+                st.markdown(
+                    '<span class="agent-chip a-System">Database</span> '
+                    '<b>returned 0 matching records</b>', unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f'<span class="agent-chip a-System">Database</span> '
+                    f'<b>returned {count} matching record(s)</b>', unsafe_allow_html=True)
+                try:
+                    st.dataframe(ast.literal_eval(results), use_container_width=True)
+                except Exception:
+                    st.code(results)
 
-        # The Auditor's grade, drawn as a colored progress bar.
-        if "score" in step and isinstance(step.get("score"), (int, float)):
-            sc    = float(step["score"])
-            color = "#4ade80" if sc >= 0.85 else ("#facc15" if sc >= 0.5 else "#f87171")
+        # ── The Auditor graded it ────────────────────────────────────────────
+        elif action == "Evaluated Retrieval":
+            sc      = float(step.get("score", 0.0))
+            passed  = sc >= 0.85
+            color   = "#4ade80" if passed else ("#facc15" if sc >= 0.5 else "#f87171")
+            verdict = "✅ good enough — accepted" if passed else "↩︎ below 0.85 — sending the Detective back to try again"
+            st.markdown(
+                f'<span class="agent-chip a-Auditor">Auditor</span> '
+                f'<b>graded the answer: {sc:.2f}</b> &nbsp; {verdict}', unsafe_allow_html=True)
             st.markdown(
                 f'<div class="score-wrap"><div class="score-fill" '
-                f'style="width:{sc*100:.0f}%;background:{color};"></div></div>'
-                f'<small>relevance score: <b>{sc:.2f}</b> '
-                f'(loop-back threshold 0.85)</small>',
-                unsafe_allow_html=True,
-            )
+                f'style="width:{sc*100:.0f}%;background:{color};"></div></div>',
+                unsafe_allow_html=True)
+            if step.get("reasoning"):
+                with st.expander("Auditor's notes"):
+                    st.write(step["reasoning"])
 
-        # The raw rows the database returned, tucked into a collapsible box.
-        if step.get("results"):
-            with st.expander("DB results"):
-                st.code(step["results"])
+        # The final-answer step is already shown up top, so skip it (and anything unknown).
+        else:
+            continue
+
         st.divider()
 
 
@@ -293,21 +336,34 @@ if run:
 
                 # The headline answer. It arrives as text holding a list of rows, so we
                 # try to show it as a neat table and fall back to plain text if needed.
-                st.markdown("### ✅ Final Audit Answer")
+                st.markdown("### ✅ Final Answer")
                 answer  = final.get("final_answer", "No answer generated.")
                 payload = answer.split("findings are:", 1)[-1].strip()
+
+                rows = None
                 try:
-                    st.dataframe(ast.literal_eval(payload), use_container_width=True)
+                    parsed = ast.literal_eval(payload)
+                    rows = parsed if isinstance(parsed, list) else None
                 except Exception:
+                    pass
+
+                if rows:
+                    st.success(f"Found {len(rows)} matching record(s):")
+                    st.dataframe(rows, use_container_width=True)
+                elif rows == []:
+                    st.warning("No matching records were found for this question.")
+                else:
                     st.info(answer)
 
-                # Two quick stats: how many tries it took, and the best grade reached.
+                # Two plain-language stats: how many tries it took, and how confident it was.
+                attempts   = final.get("retries", 0)
+                confidence = final.get("best_score", 0.0)
                 m1, m2 = st.columns(2)
-                m1.metric("Detective ↔ Auditor passes", final.get("retries", 0))
-                m2.metric("Best relevance", f"{final.get('best_score', 0.0):.2f}")
+                m1.metric("Attempts", attempts, help="How many times the Detective↔Auditor loop ran (max 3).")
+                m2.metric("Confidence", f"{confidence:.0%}", help="The Auditor's grade for the answer (≥85% passes).")
 
-                # The full behind-the-scenes trace.
-                st.markdown("### 🧠 Multi-Agent Reasoning Trace")
+                # The full behind-the-scenes story, in plain language.
+                st.markdown("### 🧠 What each specialist did")
                 render_trace(final.get("reasoning_trace", []))
             except Exception as e:
                 st.error(f"Audit failed: {e}")

@@ -37,11 +37,20 @@ auditor_agent = Agent(
     os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash'),
     output_type=AuditEval,
     system_prompt=(
-        "You are Specialist C: The Auditor. "
-        "Your role is to act as a rigorous Self-RAG evaluator for an Agentic Graph-RAG system. "
-        "You will be given the original audit question, the Cypher query generated, and the results from the Neo4j Graph. "
-        "Score the relevance and completeness of the retrieved facts from 0.0 to 1.0. "
-        "If the score is < 0.85, you must autonomously rewrite the original question to be more explicit or structured to help The Detective generate a better query next time."
+        "You are Specialist C: The Auditor — a fair, practical quality checker for a graph "
+        "database Q&A system. Judge ONE thing: do the retrieved results correctly and directly "
+        "answer the SPECIFIC question that was asked?\n"
+        "SCORING RULES:\n"
+        "- If the results contain the facts that answer the question, score HIGH (0.85–1.0). "
+        "A correct, on-topic answer is a GOOD answer even if it is short or a single row. "
+        "One row that fully answers the question deserves ~0.95.\n"
+        "- Do NOT demand extra details the user did not ask for (dates, history, deeper ownership "
+        "chains, counts, 'context', 'pathway transparency'). Judge only against what was asked.\n"
+        "- Score LOW (below 0.85) ONLY when the results are empty, contain an error, are clearly "
+        "off-topic, or genuinely miss something the question EXPLICITLY requested. When you score "
+        "low, rewrite the question to be clearer so the next query can succeed.\n"
+        "Be decisive and avoid perfectionism — retries cost time, so only send back for another "
+        "attempt when the answer is truly inadequate, not merely improvable."
     )
 )
 
@@ -63,8 +72,10 @@ def evaluate_results(original_question: str, cypher_query: str, neo4j_results: s
     Retrieved Results: {neo4j_results}
 
     Instructions:
-    Evaluate if these retrieved results comprehensively answer the audit question.
-    Assign a score. Provide reasoning. If the score is low, suggest a rewritten question.
+    Do these results answer the question that was actually asked? If yes, score 0.85–1.0
+    (a correct answer, even a single row, is a good answer). Score below 0.85 only if the
+    results are empty, errored, off-topic, or miss something the question explicitly asked
+    for — and if so, suggest a clearer rewritten question.
     """
 
     # Run the grading and hand back the structured report card.
