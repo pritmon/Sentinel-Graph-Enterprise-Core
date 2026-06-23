@@ -1,0 +1,14 @@
+# Keep the image small and never ship secrets or local cruft into it.
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+.streamlit/secrets.toml
+artifacts/
+test_system.py
+test_100.py
+run_live_test.py
+*.md
+.DS_Store

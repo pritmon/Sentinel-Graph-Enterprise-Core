@@ -140,6 +140,17 @@ Host it for free on **Streamlit Community Cloud** backed by **Neo4j Aura**. Full
 
 In short: create a free Aura database → deploy `src/dashboard.py` on [share.streamlit.io](https://share.streamlit.io) (Python 3.11) → paste your secrets. The live demo above runs exactly this setup.
 
+### 🐳 Run anywhere with Docker
+
+A [`Dockerfile`](Dockerfile) is included, so the app is portable to **any container host** (Render, Railway, Google Cloud Run, AWS App Runner/ECS, Azure Container Apps, Fly.io, Kubernetes, or a plain VPS):
+
+```bash
+docker build -t sentinel-graph .
+docker run -p 8501:8501 --env-file .env sentinel-graph
+```
+
+Then open **http://localhost:8501**. Credentials are supplied at runtime via `--env-file` (or your host's secret manager) — they're never baked into the image.
+
 ---
 
 ## 🧪 Testing
@@ -175,6 +186,7 @@ python run_live_test.py
 ├── <a href="test_100.py">test_100.py</a>             # Orchestrator stress test
 ├── <a href="run_live_test.py">run_live_test.py</a>        # End-to-end live demo script
 ├── <a href="requirements.txt">requirements.txt</a>        # Pinned dependencies
+├── <a href="Dockerfile">Dockerfile</a>              # 🐳 Container image for any host
 ├── <a href="DEPLOY.md">DEPLOY.md</a>               # Public deployment guide
 └── <a href="README.md">README.md</a>               # You are here
 </pre>
