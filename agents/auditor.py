@@ -34,7 +34,7 @@ class AuditEval(BaseModel):
 # =============================================================================
 
 auditor_agent = Agent(
-    os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash'),
+    os.environ.get('LLM_MODEL', 'anthropic:claude-haiku-4-5'),
     output_type=AuditEval,
     system_prompt=(
         "You are Specialist C: The Auditor — a fair, practical quality checker for a graph "

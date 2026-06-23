@@ -14,7 +14,7 @@ load_dotenv()
 
 print("=" * 60)
 print("SENTINEL-GRAPH LIVE END-TO-END TEST")
-print("Model :", os.getenv("GEMINI_MODEL"))
+print("Model :", os.getenv("LLM_MODEL"))
 print("Neo4j :", os.getenv("NEO4J_URI"))
 print("=" * 60)
 

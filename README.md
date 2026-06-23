@@ -119,7 +119,7 @@ Create a `.env` file in the project root (see [`.env.example`](.env.example)):
 
 ```env
 # Reasoning model — a Pydantic-AI "provider:model" string
-GEMINI_MODEL="anthropic:claude-haiku-4-5"
+LLM_MODEL="anthropic:claude-haiku-4-5"
 ANTHROPIC_API_KEY="sk-ant-..."
 
 # Neo4j connection
@@ -128,7 +128,7 @@ NEO4J_USERNAME="neo4j"
 NEO4J_PASSWORD="password"
 ```
 
-> 💡 The variable is named `GEMINI_MODEL` for historical reasons, but it accepts **any** Pydantic-AI model string — here, Anthropic's Claude Haiku 4.5.
+> 💡 `LLM_MODEL` accepts **any** Pydantic-AI `provider:model` string, so you can swap models without touching code (e.g. `anthropic:claude-sonnet-4-6`).
 
 ---
 

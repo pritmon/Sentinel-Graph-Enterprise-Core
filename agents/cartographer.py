@@ -73,7 +73,7 @@ class ExtractedKnowledge(BaseModel):
 # house rules (system_prompt) that teach it exactly how to read the document.
 
 cartographer_agent = Agent(
-    os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash'),
+    os.environ.get('LLM_MODEL', 'anthropic:claude-haiku-4-5'),
     output_type=ExtractedKnowledge,
     system_prompt=(
         "You are Specialist A: The Cartographer. "

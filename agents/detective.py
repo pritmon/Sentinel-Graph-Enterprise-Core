@@ -100,7 +100,7 @@ class QueryResult(BaseModel):
 # specific kind of broken query the AI used to write.
 
 detective_agent = Agent(
-    os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash'),
+    os.environ.get('LLM_MODEL', 'anthropic:claude-haiku-4-5'),
     output_type=QueryResult,
     system_prompt=(
         "You are Specialist B: The Detective. "

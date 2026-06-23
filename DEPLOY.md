@@ -21,7 +21,7 @@ secrets. Three steps, ~10 minutes.
 4. In **Advanced settings → Secrets**, paste (using your real Aura values + Anthropic key):
 
    ```toml
-   GEMINI_MODEL = "anthropic:claude-haiku-4-5"
+   LLM_MODEL = "anthropic:claude-haiku-4-5"
    ANTHROPIC_API_KEY = "sk-ant-..."
    NEO4J_URI = "neo4j+s://xxxxxxxx.databases.neo4j.io"
    NEO4J_USERNAME = "neo4j"

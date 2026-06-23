@@ -159,7 +159,7 @@ with st.sidebar:
     st.subheader("⚙️ System Status")
 
     # Show whether the database is reachable, plus a quick count of what's inside.
-    model = os.getenv("GEMINI_MODEL", "(unset)")
+    model = os.getenv("LLM_MODEL", "(unset)")
     stats = graph_stats()
     if stats is not None:
         st.markdown('<span class="sg-badge sg-ok">● NEO4J CONNECTED</span>', unsafe_allow_html=True)
