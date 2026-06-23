@@ -157,25 +157,25 @@ python run_live_test.py
 
 ## 📂 Project Structure
 
-```text
-Sentinel-Graph-Enterprise-Core/
-├── agents/
-│   ├── cartographer.py     # 🗺️ Specialist A — document → graph
-│   ├── detective.py        # 🕵️ Specialist B — question → Cypher
-│   ├── auditor.py          # ⚖️ Specialist C — grade & self-correct
-│   └── orchestrator.py     # 🧭 LangGraph workflow tying it together
-├── src/
-│   ├── utils.py            # Safe, parameterized Neo4j helpers
-│   └── dashboard.py        # 🖥️ Streamlit UI & reasoning-trace viewer
-├── .streamlit/             # Theme + secrets template for cloud deploy
-├── artifacts/              # Architecture notes & engineering logs
-├── test_system.py          # Integration tests
-├── test_100.py             # Orchestrator stress test
-├── run_live_test.py        # End-to-end live demo script
-├── requirements.txt        # Pinned dependencies
-├── DEPLOY.md               # Public deployment guide
-└── README.md               # You are here
-```
+<pre>
+<a href="https://github.com/pritmon/Sentinel-Graph-Enterprise-Core">Sentinel-Graph-Enterprise-Core/</a>
+├── <a href="agents">agents/</a>
+│   ├── <a href="agents/cartographer.py">cartographer.py</a>     # 🗺️ Specialist A — document → graph
+│   ├── <a href="agents/detective.py">detective.py</a>        # 🕵️ Specialist B — question → Cypher
+│   ├── <a href="agents/auditor.py">auditor.py</a>          # ⚖️ Specialist C — grade &amp; self-correct
+│   └── <a href="agents/orchestrator.py">orchestrator.py</a>     # 🧭 LangGraph workflow tying it together
+├── <a href="src">src/</a>
+│   ├── <a href="src/utils.py">utils.py</a>            # Safe, parameterized Neo4j helpers
+│   └── <a href="src/dashboard.py">dashboard.py</a>        # 🖥️ Streamlit UI &amp; reasoning-trace viewer
+├── <a href=".streamlit">.streamlit/</a>             # Theme + secrets template for cloud deploy
+├── <a href="artifacts">artifacts/</a>              # Architecture notes &amp; engineering logs
+├── <a href="test_system.py">test_system.py</a>          # Integration tests
+├── <a href="test_100.py">test_100.py</a>             # Orchestrator stress test
+├── <a href="run_live_test.py">run_live_test.py</a>        # End-to-end live demo script
+├── <a href="requirements.txt">requirements.txt</a>        # Pinned dependencies
+├── <a href="DEPLOY.md">DEPLOY.md</a>               # Public deployment guide
+└── <a href="README.md">README.md</a>               # You are here
+</pre>
 
 ---
 
