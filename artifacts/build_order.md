@@ -1,142 +1,128 @@
-# 🧱 Architecture & Build Order
+<div align="center">
 
-A developer's guide to *how this project is put together* — and the order you'd
-create the files in if you were building it from scratch.
+# 🎨 Architecture & Build Order — The Visual Guide
 
-The guiding principle is simple:
+*How this project is layered, and the order to build (or read) the files — made easy to remember.*
 
-> **Build bottom-up.** Start with the foundation, and never create a file before the
-> thing it depends on exists. That way every step gives you something you can *run and
-> verify* before you build the next layer on top of it.
+![Rule](https://img.shields.io/badge/Golden_Rule-Build_Bottom_Up-7C3AED?style=for-the-badge)
+![Phases](https://img.shields.io/badge/8_Phases-Setup→Ship-0EA5E9?style=for-the-badge)
+![Core](https://img.shields.io/badge/6_Core_Files-1_Pipeline-16A34A?style=for-the-badge)
+
+</div>
 
 ---
 
-## Dependency flow
+> [!IMPORTANT]
+> ## 🧠 One idea that unlocks everything: **You're opening a Detective Agency** 🕵️
+> Every file is a member of staff. You **hire them in the order that lets each new person start working immediately** — you can't hire a detective before there's a case file to read, and you can't hire a receptionist before the agency does anything.
 
-Each arrow means *"needs the thing before it."*
+---
 
-```text
-utils.py  →  cartographer.py  →  detective.py  →  auditor.py  →  orchestrator.py  →  dashboard.py
- (DB)         (write data)       (read data)      (grade)        (the loop)         (the UI)
-```
+## ⚡ TL;DR — the whole project on one screen
+
+| # | File | 🏢 Who they are | Their job | Why they're hired *now* |
+|:-:|------|-----------------|-----------|--------------------------|
+| 1️⃣ | `src/utils.py` | ☎️ **The phone line** | Connects to the records room (database) | Everyone uses it — set up the line *first* |
+| 2️⃣ | `agents/cartographer.py` | 🗂️ **The Archivist** | Files documents into the records room | You need files *before* anyone can search them |
+| 3️⃣ | `agents/detective.py` | 🕵️ **The Detective** | Searches the files to answer questions | Now there's something to search |
+| 4️⃣ | `agents/auditor.py` | ⚖️ **The Supervisor** | Grades the detective's answer | Only makes sense once there's an answer to grade |
+| 5️⃣ | `agents/orchestrator.py` | 🧭 **The Manager** | Coordinates the detective ⇄ supervisor loop | Needs both staff to exist first |
+| 6️⃣ | `src/dashboard.py` | 🪟 **The Receptionist** | The front desk clients actually see | Only useful once the agency *works* |
+| 7️⃣ | `test_*.py` | ✅ **The Inspector** | Locks in good behavior | Protect what works |
+| 8️⃣ | `README` · `DEPLOY` | 📣 **The Sign on the door** | Tells the world | Last — describe it once it exists |
+
+> [!TIP]
+> **Say it out loud to remember the order:**
+> ### ☎️ Connect → 🗂️ Collect → 🕵️ Question → ⚖️ Check → 🧭 Coordinate → 🪟 Show → ✅ Test → 📣 Ship
+
+---
+
+## 🗺️ The big picture (follow the colors)
 
 ```mermaid
 flowchart LR
-    U["src/utils.py<br/>DB connection"] --> C["agents/cartographer.py<br/>document → graph"]
-    U --> D["agents/detective.py<br/>question → Cypher"]
-    C -. fills the graph .-> D
-    D --> O["agents/orchestrator.py<br/>the self-correcting loop"]
-    A["agents/auditor.py<br/>grade the answer"] --> O
-    O --> UI["src/dashboard.py<br/>Streamlit UI"]
+    Doc["📄 Document"] --> C["🗂️ Cartographer<br/>files the data"]
+    C --> DB[("🗃️ Neo4j<br/>records room")]
+    Q["❓ Question"] --> D
+
+    subgraph LOOP["🔁 Self-correcting loop · up to 3 tries"]
+        direction LR
+        D["🕵️ Detective<br/>writes the query"] --> X["💾 Database<br/>runs it"]
+        X --> A["⚖️ Auditor<br/>grades 0–1"]
+    end
+
+    DB -. "phone line ☎️ utils.py" .-> D
+    A -->|"score ≥ 0.85 ✅"| Ans["📋 Answer"]
+    A -->|"score < 0.85 ↩︎"| D
+
+    classDef found fill:#1E3A8A,stroke:#93C5FD,color:#fff;
+    classDef write fill:#166534,stroke:#86EFAC,color:#fff;
+    classDef read  fill:#9333EA,stroke:#D8B4FE,color:#fff;
+    classDef done  fill:#B45309,stroke:#FCD34D,color:#fff;
+    class DB found;
+    class C write;
+    class D,X,A read;
+    class Ans done;
 ```
 
----
-
-## Phase 0 — Setup (before any real code)
-
-| # | File | Why it comes here |
-|---|------|-------------------|
-| 1 | `requirements.txt` | You can't `import` a library you haven't installed. Pinning the toolset (LangGraph, Pydantic-AI, Neo4j, Streamlit) makes the environment reproducible from day one. |
-| 2 | `.env` | The code needs secrets (database password, API key) to run. Define them once, in one place — never hardcode a key. |
+🟦 **Blue = foundation** ·  🟩 **Green = write data in** ·  🟪 **Purple = read & reason** ·  🟧 **Amber = final answer**
 
 ---
 
-## Phase 1 — The foundation
+## 🧩 Phase by phase
 
-**3. `src/utils.py` — the database connection layer.**
+### 🟦 Phase 1 — The Foundation · `src/utils.py`
+> [!NOTE]
+> **Hook: "No phone line, no agency."** ☎️
+> *Everything* talks to the database through this one file. Build and test it first (*"can I connect? can I run `RETURN 1`?"*). If this breaks, nothing else can even start.
 
-This is the very first code because **everything** eventually talks to the database, and
-it all goes through here (`get_neo4j_driver`, `execute_query`). If this doesn't work,
-nothing else can. Build it and test it in isolation ("can I connect? can I run
-`RETURN 1`?") before anything depends on it.
+### 🟩 Phase 2 — Fill the Graph · `agents/cartographer.py`
+> [!TIP]
+> **Hook: "You can't search an empty cabinet."** 🗂️
+> Before building anything that *reads* the graph, build the thing that *fills* it. Run it once and you'll literally see nodes appear in Neo4j. **Needs:** the phone line (Phase 1).
 
----
+### 🟪 Phase 3 — Read the Graph · `agents/detective.py`
+> [!NOTE]
+> **Hook: "Now hire the detective."** 🕵️
+> The cabinet has files (Phase 2), so build the part that turns a plain-English question into a database query — grounded on the *live* schema so it never guesses.
 
-## Phase 2 — Get data *in* before you read it
+### 🟪 Phase 4 — Grade the Answer · `agents/auditor.py`
+> [!TIP]
+> **Hook: "Every detective needs a supervisor."** ⚖️
+> The simplest agent — it reads the result and scores it `0.0–1.0`. Pointless without an answer to grade, so build it right before the loop that uses it.
 
-**4. `agents/cartographer.py` — document → graph.**
+### 🟧 Phase 5 — Coordinate the Loop · `agents/orchestrator.py`
+> [!IMPORTANT]
+> **Hook: "The Manager makes the team a team."** 🧭
+> This wires the Detective and Auditor into one self-correcting machine:
+> **write → run → grade → (retry if < 0.85, else finish).** It *imports* both agents, so they must exist first.
 
-You can't query an empty database. Before building the part that *reads* the graph, you
-need a part that *fills* it. The Cartographer reads a document and writes nodes and
-relationships using `utils.py`. After this file you can run it once and actually *see*
-data appear in Neo4j.
+### 🟫 Phase 6 — Show It · `src/dashboard.py`
+> [!NOTE]
+> **Hook: "Build the window last — after the house."** 🪟
+> The UI is just a window onto everything beneath it. No point building it before the pipeline works from the command line.
 
----
+### ✅ Phase 7 — Test It · `test_100.py`, `test_system.py`, `run_live_test.py`
+> [!WARNING]
+> **Hook: "Tests are a seatbelt, not a decoration."** 🔒
+> Written *after* it works, to protect that working behavior. Now a future edit that breaks something fails loudly instead of silently.
 
-## Phase 3 — Now read the data
-
-**5. `agents/detective.py` — question → Cypher query.**
-
-The graph now has data (from Phase 2), so you can build the part that answers questions
-about it. It reads the live database schema (via `utils.py`) and writes a Cypher query.
-Test it by asking a question and inspecting the query it produces.
-
----
-
-## Phase 4 — Add the quality check
-
-**6. `agents/auditor.py` — grade the answer.**
-
-The simplest agent: it reads text and scores it `0.0–1.0`. It only makes sense once you
-have a Detective answer *to* grade. It has no dependency on the other agents, so it could
-come earlier — but logically you build it right before the loop that uses it.
-
----
-
-## Phase 5 — Wire the workers together
-
-**7. `agents/orchestrator.py` — the self-correcting loop.**
-
-This is the **coordinator**, and it imports the Detective and the Auditor, so they must
-exist first. It defines the LangGraph state machine:
-
-```text
-write query → run it → grade → (retry if score < 0.85, else finish)
-```
-
-This is the file that turns three separate workers into one intelligent system. You can
-only build it once its pieces are ready.
+### 📣 Phase 8 — Ship It · `.streamlit/`, `DEPLOY.md`, `README.md`
+> [!CAUTION]
+> **Hook: "Describe it only once it's real."** 📣
+> Deploy scaffolding and docs come last — you only deploy and document something that already works.
 
 ---
 
-## Phase 6 — The human-facing layer
+## 🔑 Never forget — the golden rule
 
-**8. `src/dashboard.py` — the Streamlit UI.**
+> [!IMPORTANT]
+> ### ⛓️ Build in dependency order: never create a file before the thing it needs exists.
+> Every step should give you something you can **run and verify** before you build the next layer on top of it. That single habit is what keeps a complex project from turning into a tangled mess.
 
-The UI is just a *window* onto everything beneath it. It imports the orchestrator and the
-cartographer and puts buttons on them. There's no point building the window before the
-house exists — so build it once the full pipeline works from the command line.
+<div align="center">
 
----
+### 🧠 The chant:
+**☎️ Connect → 🗂️ Collect → 🕵️ Question → ⚖️ Check → 🧭 Coordinate → 🪟 Show → ✅ Test → 📣 Ship**
 
-## Phase 7 — Lock in the behavior
-
-| # | File | Why |
-|---|------|-----|
-| 9  | `test_100.py`    | Stress-tests the orchestrator's loop logic (mocked, no DB needed) so future edits can't silently break it. |
-| 10 | `test_system.py` | Integration tests — real database connectivity plus the agents. |
-| 11 | `run_live_test.py` | The end-to-end smoke test (real model + real DB): "does the whole thing actually work?" |
-
-You write tests *after* something works, to **protect** that working behavior from future
-changes.
-
----
-
-## Phase 8 — Polish & ship (last)
-
-| # | File | Why |
-|---|------|-----|
-| 12 | `.streamlit/` (theme + secrets template) | Deployment scaffolding — you only deploy something that already works locally. |
-| 13 | `DEPLOY.md` | The public-deployment guide (Neo4j Aura + Streamlit Cloud). |
-| 14 | `README.md` | Write/finish it last — you can only describe the project accurately once it exists. |
-
----
-
-## One-sentence summary
-
-> **Connection (`utils`) → fill the graph (`cartographer`) → read the graph (`detective`)
-> → grade (`auditor`) → coordinate (`orchestrator`) → show it (`dashboard`) → test it →
-> deploy it.**
-
-Each step produces something you can run and verify before you build the thing that
-depends on it — which is the whole secret to staying in control of a complex project.
+</div>
