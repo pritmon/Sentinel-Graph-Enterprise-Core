@@ -48,6 +48,8 @@ Ask it *"Which shell companies is the CEO connected to through contracts?"* and 
 
 ## 🏗️ How It Works
 
+> 🧱 New to the codebase? See **[artifacts/build_order.md](artifacts/build_order.md)** for a developer's walkthrough of how the project is layered and the order to build (or read) the files in.
+
 ```mermaid
 flowchart LR
     Doc["📄 Audit Document"] --> Carto["🗺️ Cartographer<br/>extract entities + properties"]
@@ -183,6 +185,6 @@ python run_live_test.py
 
 **Built with LangGraph · Pydantic-AI · Claude · Neo4j · Streamlit**
 
-[🚀 Live Demo](https://sentinel-graph-auditor.streamlit.app) · [📦 Repository](https://github.com/pritmon/Sentinel-Graph-Enterprise-Core) · [☁️ Deploy Guide](DEPLOY.md)
+[🚀 Live Demo](https://sentinel-graph-auditor.streamlit.app) · [📦 Repository](https://github.com/pritmon/Sentinel-Graph-Enterprise-Core) · [🧱 Build Guide](artifacts/build_order.md) · [☁️ Deploy Guide](DEPLOY.md)
 
 </div>
